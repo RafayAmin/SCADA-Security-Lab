@@ -1,0 +1,29 @@
+services:
+  plc:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.plc
+    hostname: plc
+    networks:
+      scada_net:
+        ipv4_address: 172.20.0.10
+    ports:
+      - "127.0.0.1:502:502"
+
+  hmi:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.hmi
+    hostname: hmi
+    networks:
+      scada_net:
+        ipv4_address: 172.20.0.11
+    depends_on:
+      - plc
+
+networks:
+  scada_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
