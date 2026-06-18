@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY scripts/gen-certs.sh /tmp/gen-certs.sh
-RUN chmod +x /tmp/gen-certs.sh && /tmp/gen-certs.sh && rm /tmp/gen-certs.sh
+COPY scripts/gen_certs.py /tmp/gen_certs.py
+RUN python3 /tmp/gen_certs.py && rm /tmp/gen_certs.py
 
 COPY strongswan/ipsec.conf /etc/ipsec.conf
 COPY strongswan/ipsec.secrets /etc/ipsec.secrets
