@@ -1,0 +1,19 @@
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    qemu-system-x86 \
+    qemu-utils \
+    wget \
+    gzip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+
+COPY docker/entrypoint-iotgoat.sh /opt/entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh
+
+EXPOSE 2222 8080 4443
+
+ENTRYPOINT ["/opt/entrypoint.sh"]

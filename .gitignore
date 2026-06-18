@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+*.egg
+
+# IDE
+.idea/
+
+# Docker runtime data
+snort/logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific - local only
+PROJECT_PLAN.md
+changes_to_be_made.txt
