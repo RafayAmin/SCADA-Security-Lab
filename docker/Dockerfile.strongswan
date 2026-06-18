@@ -1,0 +1,20 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    strongswan \
+    strongswan-pki \
+    libcharon-extra-plugins \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/gen-certs.sh /tmp/gen-certs.sh
+RUN chmod +x /tmp/gen-certs.sh && /tmp/gen-certs.sh && rm /tmp/gen-certs.sh
+
+COPY strongswan/ipsec.conf /etc/ipsec.conf
+COPY strongswan/ipsec.secrets /etc/ipsec.secrets
+
+EXPOSE 500/udp 4500/udp
+
+CMD ["ipsec", "start", "--nofork"]

@@ -40,6 +40,21 @@ services:
       - plc
       - hmi
 
+  strongswan:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.strongswan
+    hostname: strongswan
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    networks:
+      scada_net:
+        ipv4_address: 172.20.0.30
+    depends_on:
+      - plc
+      - hmi
+
 networks:
   scada_net:
     driver: bridge
