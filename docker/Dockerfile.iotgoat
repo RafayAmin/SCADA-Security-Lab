@@ -7,13 +7,13 @@ RUN apt-get update && apt-get install -y \
     qemu-utils \
     wget \
     gzip \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
 
-COPY docker/entrypoint-iotgoat.sh /opt/entrypoint.sh
-RUN chmod +x /opt/entrypoint.sh
+COPY docker/run_iotgoat.py /opt/run_iotgoat.py
 
 EXPOSE 2222 8080 4443
 
-ENTRYPOINT ["/opt/entrypoint.sh"]
+CMD ["python3", "/opt/run_iotgoat.py"]
