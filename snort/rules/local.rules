@@ -1,0 +1,42 @@
+# SCADA Security Lab - Snort Detection Rules
+
+# ---- Modbus Write Monitoring ----
+
+# Write Single Coil (function code 5)
+# Added this rule because the previous one had too many false positives on legitimate traffic
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus Write Single Coil from external source"; content:"|05|"; offset:7; depth:1; flow:to_server,established; classtype:attempted-admin; sid:1000042; rev:2;)
+
+# Write Single Register (function code 6)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus Write Single Register from external source"; content:"|06|"; offset:7; depth:1; flow:to_server,established; classtype:attempted-admin; sid:1000088; rev:1;)
+
+# Write Multiple Coils (function code 15)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus Write Multiple Coils from external source"; content:"|0F|"; offset:7; depth:1; flow:to_server,established; classtype:attempted-admin; sid:1000156; rev:1;)
+
+# Write Multiple Registers (function code 16)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus Write Multiple Registers from external source"; content:"|10|"; offset:7; depth:1; flow:to_server,established; classtype:attempted-admin; sid:1000201; rev:1;)
+
+# ---- Unauthorized Read Monitoring ----
+
+# Read Holding Registers (function code 3)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus Read Holding Registers from external source"; content:"|03|"; offset:7; depth:1; flow:to_server,established; classtype:attempted-recon; sid:1000333; rev:1;)
+
+# Read Coils (function code 1)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus Read Coils from external source"; content:"|01|"; offset:7; depth:1; flow:to_server,established; classtype:attempted-recon; sid:1000441; rev:1;)
+
+# ---- Attack Pattern Detection ----
+
+# Function code scan - unusual/undefined function codes
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus unusual function code (non-standard)"; content:"|00|"; offset:2; depth:2; byte_test:1,>,16,7; flow:to_server,established; classtype:attempted-admin; sid:1000509; rev:1;)
+
+# Modbus protocol ID mismatch (non-zero protocol ID)
+# FIXME: This rule might fire on certain SCADA client init sequences - needs tuning
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus invalid protocol ID"; content:!"|00 00|"; offset:2; depth:2; flow:to_server,established; classtype:bad-unknown; sid:1000662; rev:1;)
+
+# Rapid connection attempts (DoS indicator)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Possible Modbus DoS - rapid connections"; flow:to_server; detection_filter:track by_src, count 20, seconds 5; classtype:attempted-dos; sid:1000714; rev:1;)
+
+# Multiple distinct function codes from same source in short window (scanning)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"SCADA - Modbus function code scanning detected"; flow:to_server,established; threshold:type threshold, track by_src, count 5, seconds 10; classtype:attempted-recon; sid:1000888; rev:2;)
+
+# alert tcp $EXTERNAL_NET any -> $HOME_NET 502 (msg:"Test rule for Modbus traffic"; content:"|00|"; sid:999999;)
+# ^ commented out, was catching too much legitimate traffic

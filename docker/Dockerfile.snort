@@ -1,0 +1,12 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    snort \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY snort/snort.conf /etc/snort/snort.conf
+COPY snort/rules /etc/snort/rules
+
+CMD ["snort", "-q", "-A", "console", "-c", "/etc/snort/snort.conf", "-i", "eth0", "-k", "none"]
