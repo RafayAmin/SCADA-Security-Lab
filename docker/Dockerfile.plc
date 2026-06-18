@@ -1,7 +1,9 @@
 FROM python:3.9-slim
 
-WORKDIR /app
-COPY plc.py requirements.txt ./
-RUN pip install -r requirements.txt
+RUN apt-get update && apt-get install -y iptables && rm -rf /var/lib/apt/lists/*
 
-CMD ["python", "plc.py"]
+WORKDIR /app
+COPY plc.py requirements.txt entrypoint-plc.sh ./
+RUN pip install -r requirements.txt && chmod +x entrypoint-plc.sh
+
+CMD ["./entrypoint-plc.sh"]
