@@ -3,7 +3,7 @@ FROM python:3.9-slim
 RUN apt-get update && apt-get install -y iptables && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY plc.py requirements.txt entrypoint-plc.sh ./
-RUN pip install -r requirements.txt && chmod +x entrypoint-plc.sh
+COPY plc.py requirements.txt ./
+RUN pip install -r requirements.txt
 
-CMD ["./entrypoint-plc.sh"]
+CMD ["python", "plc.py"]
