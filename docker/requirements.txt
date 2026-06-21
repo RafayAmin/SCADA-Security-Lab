@@ -1,1 +1,4 @@
 pymodbus==3.6.3
+scikit-learn
+numpy
+joblib

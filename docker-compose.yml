@@ -55,6 +55,17 @@ services:
       - plc
       - hmi
 
+  detector:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.detector
+    hostname: detector
+    networks:
+      scada_net:
+        ipv4_address: 172.20.0.50
+    depends_on:
+      - plc
+
   iotgoat:
     build:
       context: .
