@@ -1,28 +1,44 @@
-import subprocess
+import logging
 import os
+import subprocess
 
-def run_cmd(cmd):
-    print(f"[CERTS] Running: {cmd}")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
+
+CA_DIR = "/etc/ipsec.d/cacerts"
+CERT_DIR = "/etc/ipsec.d/certs"
+KEY_DIR = "/etc/ipsec.d/private"
+
+
+def _run_cmd(cmd: str) -> None:
+    logger.info("[CERTS] Running: %s", cmd)
     try:
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-    except subprocess.CalledProcessError as e:
-        print(f"[CERTS] Command failed: {e}")
+    except subprocess.CalledProcessError:
+        logger.error("[CERTS] Command failed: %s", cmd)
         raise
 
-os.makedirs("/etc/ipsec.d/cacerts", exist_ok=True)
-os.makedirs("/etc/ipsec.d/certs", exist_ok=True)
-os.makedirs("/etc/ipsec.d/private", exist_ok=True)
 
-run_cmd("pki --gen --type rsa --size 2048 > /etc/ipsec.d/private/ca-key.der")
-run_cmd("pki --self --ca --lifetime 3650 --in /etc/ipsec.d/private/ca-key.der --dn 'CN=SCADA Lab CA, O=SCADA-Security-Lab' > /etc/ipsec.d/cacerts/ca-cert.der")
+def main() -> None:
+    os.makedirs(CA_DIR, exist_ok=True)
+    os.makedirs(CERT_DIR, exist_ok=True)
+    os.makedirs(KEY_DIR, exist_ok=True)
 
-run_cmd("pki --gen --type rsa --size 2048 > /etc/ipsec.d/private/server-key.der")
-run_cmd("pki --pub --in /etc/ipsec.d/private/server-key.der --type rsa > /etc/ipsec.d/private/server-pub.der")
-run_cmd("pki --issue --lifetime 3650 --cacert /etc/ipsec.d/cacerts/ca-cert.der --cakey /etc/ipsec.d/private/ca-key.der --dn 'CN=172.20.0.30, O=SCADA-Security-Lab' --san 172.20.0.30 --san strongswan --flag serverAuth --in /etc/ipsec.d/private/server-pub.der > /etc/ipsec.d/certs/server-cert.der")
+    _run_cmd(f"pki --gen --type rsa --size 2048 > {KEY_DIR}/ca-key.der")
+    _run_cmd(
+        f"pki --self --ca --lifetime 3650 --in {KEY_DIR}/ca-key.der --dn 'CN=SCADA Lab CA, O=SCADA-Security-Lab' > {CA_DIR}/ca-cert.der"  # noqa: E501
+    )
+    _run_cmd(f"pki --gen --type rsa --size 2048 > {KEY_DIR}/server-key.der")
+    _run_cmd(f"pki --pub --in {KEY_DIR}/server-key.der --type rsa > {KEY_DIR}/server-pub.der")
+    _run_cmd(
+        f"pki --issue --lifetime 3650 --cacert {CA_DIR}/ca-cert.der --cakey {KEY_DIR}/ca-key.der --dn 'CN=172.20.0.30, O=SCADA-Security-Lab' --san 172.20.0.30 --san strongswan --flag serverAuth --in {KEY_DIR}/server-pub.der > {CERT_DIR}/server-cert.der"  # noqa: E501
+    )
+    _run_cmd(f"openssl rsa -inform DER -in {KEY_DIR}/ca-key.der -outform PEM -out {KEY_DIR}/ca-key.pem")
+    _run_cmd(f"openssl rsa -inform DER -in {KEY_DIR}/server-key.der -outform PEM -out {KEY_DIR}/server-key.pem")
+    _run_cmd(f"openssl x509 -inform DER -in {CA_DIR}/ca-cert.der -outform PEM -out {CA_DIR}/ca-cert.pem")
+    _run_cmd(f"openssl x509 -inform DER -in {CERT_DIR}/server-cert.der -outform PEM -out {CERT_DIR}/server-cert.pem")
+    logger.info("[CERTS] Certificate generation complete.")
 
-run_cmd("openssl rsa -inform DER -in /etc/ipsec.d/private/ca-key.der -outform PEM -out /etc/ipsec.d/private/ca-key.pem")
-run_cmd("openssl rsa -inform DER -in /etc/ipsec.d/private/server-key.der -outform PEM -out /etc/ipsec.d/private/server-key.pem")
-run_cmd("openssl x509 -inform DER -in /etc/ipsec.d/cacerts/ca-cert.der -outform PEM -out /etc/ipsec.d/cacerts/ca-cert.pem")
-run_cmd("openssl x509 -inform DER -in /etc/ipsec.d/certs/server-cert.der -outform PEM -out /etc/ipsec.d/certs/server-cert.pem")
 
-print("[CERTS] Certificate generation complete.")
+if __name__ == "__main__":
+    main()

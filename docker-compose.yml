@@ -66,6 +66,32 @@ services:
     depends_on:
       - plc
 
+  calibrator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.calibrator
+    hostname: calibrator
+    networks:
+      scada_net:
+        ipv4_address: 172.20.0.45
+    depends_on:
+      - plc
+    profiles:
+      - calibrate
+
+  attacker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.attacker
+    hostname: attacker
+    networks:
+      scada_net:
+        ipv4_address: 172.20.0.60
+    depends_on:
+      - plc
+    profiles:
+      - attack
+
   iotgoat:
     build:
       context: .
