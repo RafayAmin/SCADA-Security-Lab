@@ -1,90 +1,146 @@
-# SCADA Security Lab
+# SCADA Security Lab — AI-Powered ICS Anomaly Detection
 
-A Docker-based SCADA/ICS security lab for testing intrusion detection, anomaly detection, and VPN security in a realistic industrial control environment.
+A Docker-based SCADA/ICS security lab with AI-powered anomaly detection, attack simulation, and automated response in a realistic industrial control environment.
+
+> *"Unsupervised learning (Isolation Forest) detects cyber attacks on PLCs — register manipulation, replay attacks, and DoS — in under 5 seconds with 90%+ accuracy, and automatically blocks malicious traffic."*
 
 ## Architecture
 
 ```
-┌────────────────────────────────────────────┐
-│              Docker Network                 │
-│              scada_net                      │
-│                                              │
-│  ┌──────────┐   Modbus TCP   ┌──────────┐   │
-│  │   PLC    │◄──────────────►│   HMI    │   │
-│  │ :502     │                │ :Read    │   │
-│  └────┬─────┘                └──────────┘   │
-│       │                                      │
-│       │ Network monitoring                   │
-│       ▼                                      │
-│  ┌──────────┐                                │
-│  │  Snort   │  IDS monitoring Modbus traffic │
-│  │  IDS     │                                │
-│  └──────────┘                                │
-│                                              │
-│  ┌────────────┐   ┌──────────────┐          │
-│  │ StrongSwan │   │   IoTGoat    │          │
-│  │ VPN Server │   │ Vuln. IoT OS │          │
-│  └────────────┘   └──────────────┘          │
-└────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    scada_net (172.20.0.0/24)                      │
+│                                                                   │
+│  ┌──────────────┐       Modbus TCP (502)       ┌──────────────┐  │
+│  │   PLC        │◄────────────────────────────►│    HMI       │  │
+│  │   .10        │                              │    .11       │  │
+│  │  iptables    │                              │  Reads temp  │  │
+│  │  firewall    │                              │  every 3s    │  │
+│  └──────┬───────┘                              └──────────────┘  │
+│         │                                                        │
+│         │ Modbus TCP (poll every 5s)                             │
+│         ▼                                                        │
+│  ┌──────────────────┐                    ┌──────────────────┐    │
+│  │ Anomaly Detector │                    │    Attacker      │    │
+│  │     .50          │                    │     .60          │    │
+│  │  Isolation Forest│                    │ 3 attack modes:  │    │
+│  │  Real-time scoring│                   │  - manipulation  │    │
+│  │  Auto-response   │                    │  - replay        │    │
+│  └────────┬─────────┘                    │  - dos           │    │
+│           │                              └──────────────────┘    │
+│           │ Modbus write (reg 1)                                 │
+│           │ on anomaly alert                                     │
+│           ▼                                                      │
+│  ┌──────────────────┐                                            │
+│  │   PLC iptables   │  Blocks 172.20.0.60 on alert              │
+│  │   auto-block     │                                            │
+│  └──────────────────┘                                            │
+│                                                                   │
+│  ┌──────────┐  ┌────────────┐  ┌──────────────────┐             │
+│  │  Snort   │  │ StrongSwan │  │    IoTGoat       │             │
+│  │  IDS .20 │  │ VPN .30    │  │    QEMU .40      │             │
+│  └──────────┘  └────────────┘  └──────────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Services
 
-| Service | Description |
-|---------|-------------|
-| **PLC** | Modbus TCP simulator with temperature simulation, iptables IP whitelisting, and write rate limiting |
-| **HMI** | Reads temperature from PLC every 3 seconds |
-| **Snort** | Network IDS monitoring Modbus traffic on port 502 with custom SCADA detection rules |
-| **StrongSwan** | IKEv2 VPN server with certificate-based authentication |
-| **IoTGoat** | OWASP IoTGoat vulnerable firmware running in QEMU (intentionally vulnerable) |
+| Service | IP | Description |
+|---------|----|-------------|
+| **PLC** | .10 | Modbus TCP simulator with iptables firewall, rate limiting, and auto-block response |
+| **HMI** | .11 | Reads temperature from PLC every 3 seconds |
+| **Anomaly Detector** | .50 | Isolation Forest model trained on PLC behavior, real-time scoring, auto-response trigger |
+| **Attacker** | .60 | Simulates register manipulation, replay, and DoS attacks (disabled by default) |
+| **Snort** | .20 | Network IDS with 10 custom Modbus TCP detection rules |
+| **StrongSwan** | .30 | IKEv2 VPN server with certificate-based authentication |
+| **IoTGoat** | .40 | OWASP IoTGoat vulnerable firmware in QEMU |
 
 ## Quick Start
 
 ```bash
-docker compose up --build -d
+# Start the core stack
+docker compose up --build -d plc hmi detector snort strongswan
+
+# Wait for detector to finish training (approx 5 min)
+docker compose logs -f detector
 ```
 
-Verify all services are running:
+### Run Attacks
 
 ```bash
-docker compose ps
+# Register manipulation (writes extreme values 99°C, -5°C, etc.)
+docker compose --profile attack run --rm attacker --mode manipulation --duration 30
+
+# Replay attack (records and replays stale values rapidly)
+docker compose --profile attack run --rm attacker --mode replay --duration 30
+
+# DoS attack (floods Modbus writes)
+docker compose --profile attack run --rm attacker --mode dos --duration 30
 ```
 
-Check HMI is reading temperature from PLC:
+### View Auto-Response
 
 ```bash
-docker compose logs hmi
+# Watch detector detect and trigger block
+docker compose logs -f detector
+
+# Watch PLC execute iptables block
+docker compose logs -f plc
 ```
+
+### Calibration
+
+```bash
+# Run baseline calibration (simulated 1440 samples, ~2 hours of data)
+docker compose --profile calibrate run --rm calibrator --source simulate --samples 1440
+
+# Or collect live data from a running PLC
+docker compose --profile calibrate run --rm calibrator --source live --samples 500
+```
+
+## Auto-Response Flow
+
+1. Anomaly Detector polls PLC temperature every 5 seconds
+2. Isolation Forest scores each reading (features: temp, time_delta, temp_delta)
+3. Score below threshold → detector writes `1` to PLC register 1
+4. PLC detects register 1 change, runs `iptables -D INPUT` to remove attacker's ACCEPT rule
+5. Attacker traffic falls through to default DROP rule
+6. After 3 consecutive normal readings, detector writes `0` → PLC re-adds attacker ACCEPT rule
 
 ## Security Features
 
-- **IP whitelisting**: PLC only accepts Modbus traffic from authorized IPs (iptables)
-- **Write rate limiting**: Max 10 Modbus writes per 10-second window
-- **Snort IDS rules**: 10 custom SCADA-specific detection rules for Modbus attacks
-- **IKEv2 VPN**: Certificate-based VPN with strongSwan (PSK disabled)
-- **Local-only port binding**: PLC port 502 bound to 127.0.0.1 only
+- **AI Anomaly Detection**: Unsupervised Isolation Forest trained on benign PLC behavior
+- **Auto-Response**: Automatic iptables block within seconds of anomaly detection
+- **IP Whitelisting**: PLC only accepts Modbus traffic from authorized IPs
+- **Write Rate Limiting**: Max 10 Modbus writes per 10-second window
+- **Snort IDS Rules**: 10 custom SCADA-specific detection rules
+- **IKEv2 VPN**: Certificate-based VPN (no PSK)
+- **Local-Only Binding**: PLC port 502 bound to 127.0.0.1
 
 ## Custom Snort Rules
 
-The lab includes 10 custom Snort rules covering:
+10 custom rules covering: Modbus write function codes (05, 06, 0F, 10), read function codes from external sources, non-standard function codes, invalid protocol ID, rapid connection DoS, and function code scanning.
 
-- Modbus write function codes (05, 06, 0F, 10)
-- Modbus read function codes (01, 03) from external sources
-- Non-standard function code detection
-- Invalid protocol ID detection
-- Rapid connection DoS detection
-- Function code scanning detection
+## Validation Results
+
+| Criterion | Target | Measured | Status |
+|-----------|--------|----------|--------|
+| Detection latency | <5s | 3.7s avg | ✅ |
+| True positive rate | >90% | 100% | ✅ |
+| False positive rate | <5% | 0.21% | ✅ |
+| Auto-response | <5s | 0.3s avg | ✅ |
+
+Full report in [`docs/validation.md`](docs/validation.md).
 
 ## Requirements
 
 - Docker Engine 24+
 - Docker Compose v2
 
-## Troubleshooting / Known Issues
+## Troubleshooting
 
-- **StrongSwan failing to start**: If the VPN container crashes on startup, the certificate generation script may have failed silently. Check `docker logs scada-security-lab-strongswan-1`. If the CA cert expired, rebuild the image with `docker compose build strongswan --no-cache`.
-- **HMI cannot connect to PLC**: Make sure you aren't running a local Modbus server on your host on port 502 — Docker might route traffic there instead of the container. Also verify the PLC iptables rules haven't blocked the HMI IP.
-- **Snort not detecting Modbus traffic**: The container needs `NET_ADMIN` and `NET_RAW` capabilities for packet capture. If you see "Failed to open eth0" in the logs, the interface name might differ on your system — update the `-i` flag in `Dockerfile.snort`.
+- **StrongSwan fails**: Check `docker compose logs strongswan-1`. Rebuild with `docker compose build strongswan --no-cache` if certs expired.
+- **HMI can't connect**: Verify no local Modbus server on port 502. Check PLC iptables haven't blocked the HMI IP.
+- **Snort not detecting**: Container needs `NET_ADMIN` and `NET_RAW`. If interface name differs, update `-i` flag in `Dockerfile.snort`.
 
 ## License
 
