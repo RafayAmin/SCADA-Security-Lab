@@ -10,9 +10,46 @@ from pymodbus.server import StartTcpServer  # type: ignore[import]
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-AUTHORIZED_WRITE_IPS = {"172.20.0.11", "172.20.0.12", "172.20.0.60"}
+AUTHORIZED_WRITE_IPS = {"172.20.0.11", "172.20.0.12", "172.20.0.50", "172.20.0.60"}
 WRITE_RATE_LIMIT = 10
 WRITE_RATE_WINDOW = 10
+BLOCK_REGISTER = 1
+
+_blocked = False
+
+
+def block_attacker() -> None:
+    global _blocked
+    if _blocked:
+        return
+    logger.info("[PLC] Blocking attacker (172.20.0.60)...")
+    try:
+        subprocess.run(
+            "iptables -D INPUT -p tcp --dport 502 -s 172.20.0.60 -j ACCEPT".split(),
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        _blocked = True
+        logger.info("[PLC] Attacker blocked")
+    except subprocess.CalledProcessError:
+        logger.warning("[PLC] Failed to block attacker (rule may not exist)")
+
+
+def unblock_attacker() -> None:
+    global _blocked
+    if not _blocked:
+        return
+    logger.info("[PLC] Unblocking attacker (172.20.0.60)...")
+    try:
+        subprocess.run(
+            "iptables -I INPUT -p tcp --dport 502 -s 172.20.0.60 -j ACCEPT".split(),
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        _blocked = False
+        logger.info("[PLC] Attacker unblocked")
+    except subprocess.CalledProcessError:
+        logger.warning("[PLC] Failed to unblock attacker")
 
 
 def setup_firewall() -> None:
@@ -52,9 +89,19 @@ class RateLimitedSlaveContext(ModbusSlaveContext):
 
 def update_registers(store: RateLimitedSlaveContext) -> None:
     holding = 25
+    prev_block = 0
     while True:
         holding += 1 if holding < 30 else -5
-        store.store["h"].setValues(0, [holding])  # type: ignore[attr-defined]
+        store.store["h"].setValues(0, [holding])
+
+        block_cmd = store.store["h"].getValues(BLOCK_REGISTER, count=1)[0]
+        if block_cmd != prev_block:
+            if block_cmd == 1:
+                block_attacker()
+            else:
+                unblock_attacker()
+            prev_block = block_cmd
+
         time.sleep(5)
 
 

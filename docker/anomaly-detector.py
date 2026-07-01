@@ -21,6 +21,8 @@ TRAIN_SAMPLES = 50
 MODEL_PATH = "/app/model.joblib"
 ANOMALY_THRESHOLD = -0.3
 CONTAMINATION = 0.05
+BLOCK_REGISTER = 1
+CLEAR_CONSECUTIVE_NORMAL = 3
 
 
 class Sample(TypedDict):
@@ -91,6 +93,13 @@ def _train_model(buffer: Deque[Sample]) -> IsolationForest:
     return model
 
 
+def _write_block_signal(client: ModbusTcpClient, value: int) -> None:
+    try:
+        client.write_register(address=BLOCK_REGISTER, value=value, unit=1)
+    except Exception:
+        logger.exception("[DETECTOR] Failed to write block signal to PLC")
+
+
 def _load_or_train(client: ModbusTcpClient) -> tuple[IsolationForest, Deque[Sample]]:
     try:
         model: IsolationForest = joblib.load(MODEL_PATH)  # type: ignore[assignment]
@@ -112,6 +121,8 @@ def main() -> None:
 
     last_temp = buffer[-1]["temp"]
     last_ts = time.time()
+    alert_active = False
+    consecutive_normal = 0
 
     while True:
         try:
@@ -147,6 +158,10 @@ def main() -> None:
                     temp_delta,
                     score,
                 )
+                if not alert_active:
+                    _write_block_signal(client, 1)
+                    alert_active = True
+                    consecutive_normal = 0
             else:
                 logger.info(
                     "[DETECTOR] Normal: temp=%.1f°C, time_delta=%.2fs, score=%.4f",
@@ -154,6 +169,12 @@ def main() -> None:
                     time_delta,
                     score,
                 )
+                if alert_active:
+                    consecutive_normal += 1
+                    if consecutive_normal >= CLEAR_CONSECUTIVE_NORMAL:
+                        _write_block_signal(client, 0)
+                        alert_active = False
+                        consecutive_normal = 0
 
             if len(buffer) % 50 == 0:
                 model = _train_model(buffer)
